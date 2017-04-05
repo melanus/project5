@@ -19,6 +19,7 @@ how to use the page table and disk interfaces.
 
 char *algorithm = "rand";
 int *table = NULL;
+int last = 0;
 
 void page_fault_handler( struct page_table *pt, int page )
 {
@@ -52,7 +53,36 @@ void page_fault_handler( struct page_table *pt, int page )
 			//write to disk
 		}
 	}
+	else if(strcmp("fifo", algorithm))
+	{
+		int i;
+		int nframes = page_table_get_nframes(pt);
+		int frame;
+		int bits;
+		page_table_get_entry(pt, page, &frame, &bits);
 
+		if(bits == 0)	//this is loading into empty frame
+		{
+			page_table_set_entry(pt, page, last, PROT_READ);
+
+			// find the frame number
+			last++;
+			last = last % nframes; // don't want to exceed # of frames
+		}
+		else if(bits == 3)	//this is trying to write and needs perms
+		{
+			page_table_set_entry(pt, page, frame, PROT_READ|PROT_WRITE);
+		}
+		else if(bits == 7)
+		{
+			// Open disk and write to disk
+			disk_write(disk, block, data);
+			
+			// add new entry to page table
+			page_table_set_entry(pt, page, last, PROT_READ);
+			//write to disk
+		}
+	}
 	//page_table_set_entry(pt, page, page, PROT_READ|PROT_WRITE);
 	//exit(1);
 }
