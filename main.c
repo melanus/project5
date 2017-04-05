@@ -19,29 +19,41 @@ how to use the page table and disk interfaces.
 
 char *algorithm = "rand";
 int *table = NULL;
-int nframes;
 
 void page_fault_handler( struct page_table *pt, int page )
 {
 	printf("page fault on page #%d\n",page);
 	if(strcmp("rand", algorithm))
 	{
+		int i;
+		int nframes = page_table_get_nframes(pt);
 		int frame;
 		int bits;
 		page_table_get_entry(pt, page, &frame, &bits);
+
 		if(bits == 0)	//this is loading into empty frame
 		{
-			int r = rand() % nframes;
-			while(table[r] != -1)
+			for(i = 0; i < nframes; i++)  //check for empty frames
 			{
-				r = rand() % nframes;
+				if(table[i] == -1)
+				{
+					page_table_set_entry(pt, page, i, PROT_READ);
+					table[i] = page;
+					return;
+				}
 			}
-			page_table_set_entry(pt, page, r, PROT_READ);
 		}
-
+		else if(bits == 3)	//this is trying to write and needs perms
+		{
+			page_table_set_entry(pt, page, frame, PROT_READ|PROT_WRITE);
+		}
+		else if(bits == 7)
+		{
+			//write to disk
+		}
 	}
 
-	page_table_set_entry(pt, page, page, PROT_READ|PROT_WRITE);
+	//page_table_set_entry(pt, page, page, PROT_READ|PROT_WRITE);
 	//exit(1);
 }
 
@@ -55,7 +67,7 @@ int main( int argc, char *argv[] )
 	}
 
 	int npages = atoi(argv[1]);
-	nframes = atoi(argv[2]);
+	int nframes = atoi(argv[2]);
 	algorithm = argv[3];
 	const char *program = argv[4];
 
