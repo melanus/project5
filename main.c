@@ -25,7 +25,6 @@ int last = 0;
 void page_fault_handler( struct page_table *pt, int page )
 {
 	printf("page fault on page #%d\n",page);
-	printf("last is: %d\n", last);
 	if(!strcmp("rand", algorithm))
 	{
 		//printf("started rand\n");
@@ -121,7 +120,6 @@ void page_fault_handler( struct page_table *pt, int page )
 		}
 		else if(bits != 0)	//this is trying to write and needs perms
 		{
-			printf("Does the problem occur here?\n");
 			//the relevant data is already loaded
 			//it just needs write access
 			page_table_set_entry(pt, page, frame, PROT_READ|PROT_WRITE);
