@@ -25,22 +25,23 @@ int last = 0;
 void page_fault_handler( struct page_table *pt, int page )
 {
 	printf("page fault on page #%d\n",page);
-	//if(!strcmp("rand", algorithm))
-	//{
-		//printf("started rand\n");
+
 	int i;
 	int nframes = page_table_get_nframes(pt);
 	int frame;
 	int bits;
 	page_table_get_entry(pt, page, &frame, &bits);
 	char *physmem = page_table_get_physmem(pt);
+	printf("page %d located at frame %d\n", page, frame);
 
 	if(bits == 0)	//this page is not present, so load it
 	{
+		printf("loading in new page %d\n", page);
 		for(i = 0; i < nframes; i++)  //check for empty frames
 		{
 			if(table[i] == -1)
 			{
+				printf("found empty frame at %d\n", i);
 				page_table_set_entry(pt, page, i, PROT_READ);
 				disk_read(disk, page, &physmem[i*PAGE_SIZE]);
 				table[i] = page;
@@ -57,8 +58,9 @@ void page_fault_handler( struct page_table *pt, int page )
 		{
 			int r = rand() % nframes;	//frame # to replace
 			page_table_get_entry(pt, page, &frame, &bits);
-			if (bits >= 3)  //corrsponds to 011, write bit set
+			if (bits != PROT_READ) 
 			{
+				printf("replacing frame %d and writing to disk\n", r);
 				disk_write(disk, table[r], &physmem[r*PAGE_SIZE]);
 				//write changes to disk, now ready to replace
 			}
@@ -73,8 +75,9 @@ void page_fault_handler( struct page_table *pt, int page )
 		else if(!strcmp("fifo", algorithm))
 		{
 			page_table_get_entry(pt, page, &frame, &bits);
-			if (bits >= 3)  //corrsponds to 011, write bit set
+			if (bits != PROT_READ)
 			{
+				printf("replacing frame %d and writing to disk\n", last);
 				disk_write(disk, table[last], &physmem[last*PAGE_SIZE]);
 				//write changes to disk, now ready to replace
 			}
@@ -89,6 +92,7 @@ void page_fault_handler( struct page_table *pt, int page )
 	}
 	else if(bits != 0)	//this is trying to write and needs perms
 	{
+		printf("Adding write bit to frame %d\n", frame);
 		//the relevant data is already loaded
 		//it just needs write access
 		page_table_set_entry(pt, page, frame, PROT_READ|PROT_WRITE);
