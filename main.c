@@ -113,7 +113,6 @@ void page_fault_handler( struct page_table *pt, int page )
 			disk_read(disk, page, &physmem[last*PAGE_SIZE]);
 			page_table_set_entry(pt, page, last, PROT_READ);
 			page_table_set_entry(pt, table[last], 0, 0);
-			last = (last + 1) % nframes;
 			//update page table and remove reference to old page
 
 			table[last] = page;
@@ -125,9 +124,9 @@ void page_fault_handler( struct page_table *pt, int page )
 			//it just needs write access
 			page_table_set_entry(pt, page, frame, PROT_READ|PROT_WRITE);
 		}
+		last = (last + 1) % nframes;
 	}
 
-	//test value
 	//page_table_set_entry(pt, page, page, PROT_READ|PROT_WRITE);
 	//exit(1);
 }
