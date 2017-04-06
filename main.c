@@ -10,7 +10,7 @@ how to use the page table and disk interfaces.
 #include "disk.h"
 #include "program.h"
 
-#include <stdio.h>
+#include <stdio.h> 
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -19,70 +19,116 @@ how to use the page table and disk interfaces.
 
 char *algorithm = "rand";
 int *table = NULL;
+struct disk *disk;
 int last = 0;
 
 void page_fault_handler( struct page_table *pt, int page )
 {
 	printf("page fault on page #%d\n",page);
-	if(strcmp("rand", algorithm))
+	printf("last is: %d\n", last);
+	if(!strcmp("rand", algorithm))
 	{
+		//printf("started rand\n");
 		int i;
 		int nframes = page_table_get_nframes(pt);
 		int frame;
 		int bits;
 		page_table_get_entry(pt, page, &frame, &bits);
+		char *physmem = page_table_get_physmem(pt);
 
-		if(bits == 0)	//this is loading into empty frame
+		if(bits == 0)	//this page is not present, so load it
 		{
 			for(i = 0; i < nframes; i++)  //check for empty frames
 			{
 				if(table[i] == -1)
 				{
 					page_table_set_entry(pt, page, i, PROT_READ);
+					disk_read(disk, page, &physmem[i*PAGE_SIZE]);
 					table[i] = page;
 					return;
 				}
 			}
+
+			//if there are no empty frames, we will pick
+			//a frame at random to replace. If that frame
+			//has been written to, we need to write 
+			//those changes to disk
+
+			int r = rand() % nframes;	//frame # to replace
+			page_table_get_entry(pt, page, &frame, &bits);
+			if (bits >= 3)  //corrsponds to 011, write bit set
+			{
+				disk_write(disk, table[r], &physmem[r*PAGE_SIZE]);
+				//write changes to disk, now ready to replace
+			}
+			disk_read(disk, page, &physmem[r*PAGE_SIZE]);
+			page_table_set_entry(pt, page, r, PROT_READ);
+			page_table_set_entry(pt, table[r], 0, 0);
+			//update page table and remove reference to old page
+
+			table[r] = page;
+
 		}
-		else if(bits == 3)	//this is trying to write and needs perms
+		else if(bits != 0)	//this is trying to write and needs perms
 		{
+			//the relevant data is already loaded
+			//it just needs write access
 			page_table_set_entry(pt, page, frame, PROT_READ|PROT_WRITE);
 		}
-		else if(bits == 7)
-		{
-			//write to disk
-		}
 	}
-	else if(strcmp("fifo", algorithm))
+
+	if(!strcmp("fifo", algorithm))
 	{
+		//printf("started rand\n");
 		int i;
 		int nframes = page_table_get_nframes(pt);
 		int frame;
 		int bits;
 		page_table_get_entry(pt, page, &frame, &bits);
+		char *physmem = page_table_get_physmem(pt);
 
-		if(bits == 0)	//this is loading into empty frame
+		if(bits == 0)	//this page is not present, so load it
 		{
+			for(i = 0; i < nframes; i++)  //check for empty frames
+			{
+				if(table[i] == -1)
+				{
+					page_table_set_entry(pt, page, i, PROT_READ);
+					disk_read(disk, page, &physmem[i*PAGE_SIZE]);
+					table[i] = page;
+					return;
+				}
+			}
+
+			//if there are no empty frames, we will pick
+			//first frame that was entered (the first frame)
+			//has been written to, we need to write 
+			//those changes to disk
+
+			page_table_get_entry(pt, page, &frame, &bits);
+			if (bits >= 3)  //corrsponds to 011, write bit set
+			{
+				disk_write(disk, table[last], &physmem[last*PAGE_SIZE]);
+				//write changes to disk, now ready to replace
+			}
+			disk_read(disk, page, &physmem[last*PAGE_SIZE]);
 			page_table_set_entry(pt, page, last, PROT_READ);
+			page_table_set_entry(pt, table[last], 0, 0);
+			//update page table and remove reference to old page
 
-			// find the frame number
-			last++;
-			last = last % nframes; // don't want to exceed # of frames
+			table[last] = page;
+
 		}
-		else if(bits == 3)	//this is trying to write and needs perms
+		else if(bits != 0)	//this is trying to write and needs perms
 		{
+			printf("Does the problem occur here?\n");
+			//the relevant data is already loaded
+			//it just needs write access
 			page_table_set_entry(pt, page, frame, PROT_READ|PROT_WRITE);
 		}
-		else if(bits == 7)
-		{
-			// Open disk and write to disk
-			disk_write(disk, block, data);
-			
-			// add new entry to page table
-			page_table_set_entry(pt, page, last, PROT_READ);
-			//write to disk
-		}
+		last = (last + 1) % nframes;
 	}
+
 	//page_table_set_entry(pt, page, page, PROT_READ|PROT_WRITE);
 	//exit(1);
 }
@@ -109,7 +155,7 @@ int main( int argc, char *argv[] )
 		table[i] = -1;  //-1 indicates empty
 	}
 
-	struct disk *disk = disk_open("myvirtualdisk",npages);
+	disk = disk_open("myvirtualdisk",npages);
 	if(!disk) {
 		fprintf(stderr,"couldn't create virtual disk: %s\n",strerror(errno));
 		return 1;
