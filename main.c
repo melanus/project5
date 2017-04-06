@@ -20,6 +20,7 @@ how to use the page table and disk interfaces.
 char *algorithm = "rand";
 int *table = NULL;
 struct disk *disk;
+int last = 0;
 
 void page_fault_handler( struct page_table *pt, int page )
 {
@@ -65,6 +66,57 @@ void page_fault_handler( struct page_table *pt, int page )
 			//update page table and remove reference to old page
 
 			table[r] = page;
+
+		}
+		else if(bits != 0)	//this is trying to write and needs perms
+		{
+			//the relevant data is already loaded
+			//it just needs write access
+			page_table_set_entry(pt, page, frame, PROT_READ|PROT_WRITE);
+		}
+	}
+
+	if(!strcmp("fifo", algorithm))
+	{
+		//printf("started rand\n");
+		int i;
+		int nframes = page_table_get_nframes(pt);
+		int frame;
+		int bits;
+		page_table_get_entry(pt, page, &frame, &bits);
+		char *physmem = page_table_get_physmem(pt);
+
+		if(bits == 0)	//this page is not present, so load it
+		{
+			for(i = 0; i < nframes; i++)  //check for empty frames
+			{
+				if(table[i] == -1)
+				{
+					page_table_set_entry(pt, page, i, PROT_READ);
+					disk_read(disk, page, &physmem[i*PAGE_SIZE]);
+					table[i] = page;
+					return;
+				}
+			}
+
+			//if there are no empty frames, we will pick
+			//first frame that was entered (the first frame)
+			//has been written to, we need to write 
+			//those changes to disk
+
+			page_table_get_entry(pt, page, &frame, &bits);
+			if (bits >= 3)  //corrsponds to 011, write bit set
+			{
+				disk_write(disk, table[last], &physmem[last*PAGE_SIZE]);
+				//write changes to disk, now ready to replace
+			}
+			disk_read(disk, page, &physmem[last*PAGE_SIZE]);
+			page_table_set_entry(pt, page, last, PROT_READ);
+			page_table_set_entry(pt, table[last], 0, 0);
+			last = (last + 1) % nframes;
+			//update page table and remove reference to old page
+
+			table[last] = page;
 
 		}
 		else if(bits != 0)	//this is trying to write and needs perms
