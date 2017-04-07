@@ -22,10 +22,12 @@ int *table = NULL;
 struct disk *disk;
 int last = 0;
 int nfaults = 0, nwrites = 0, nreads = 0;
+int *numFaultsOnPage = NULL;
 
 void page_fault_handler( struct page_table *pt, int page )
 {
 	++nfaults;
+	++numFaultsOnPage[page];
 	//printf("page fault on page #%d\n",page);
 
 	int i;
@@ -60,7 +62,7 @@ void page_fault_handler( struct page_table *pt, int page )
 		if(!strcmp("rand", algorithm))
 		{
 			int r = rand() % nframes;	//frame # to replace
-			page_table_get_entry(pt, page, &frame, &bits);
+
 			if (bits != PROT_READ) 
 			{
 				//printf("replacing frame %d and writing to disk\n", r);
@@ -79,7 +81,6 @@ void page_fault_handler( struct page_table *pt, int page )
 		}
 		else if(!strcmp("fifo", algorithm))
 		{
-			page_table_get_entry(pt, page, &frame, &bits);
 			if (bits != PROT_READ)
 			{
 				//printf("replacing frame %d and writing to disk\n", last);
@@ -96,7 +97,20 @@ void page_fault_handler( struct page_table *pt, int page )
 			table[last] = page;
 			last = (last + 1) % nframes;
 		}
-		else if(!strcmp("custom", algorithm)) {}
+		else if(!strcmp("custom", algorithm)) 
+		{
+			if(bits != PROT_READ)
+			{
+				disk_write(disk, something, &physmem[something * PAGE_SIZE]);
+				++nwrites;
+				//write to disk, now ready to replace	
+			}
+			disk_read(disk, page, &physmem[something*PAGE_SIZE]);
+			++nreads;
+			page_table_set_entry(pt, page, something, PROT_READ);
+			page_table_set_entry(pt, old, 0, 0);
+			
+		}
 	}
 	else if(bits != 0)	//this is trying to write and needs perms
 	{
@@ -128,6 +142,10 @@ int main( int argc, char *argv[] )
 	for (i = 0; i < nframes; i++)
 	{
 		table[i] = -1;  //-1 indicates empty
+	}
+	for (i = 0; i < npages; i++)
+	{
+		numFaultsOnPage[i] = 0;
 	}
 
 	disk = disk_open("myvirtualdisk",npages);
