@@ -29,7 +29,7 @@ void page_fault_handler( struct page_table *pt, int page )
 {
 	++nfaults;
 	++numFaultsOnPage[page];
-	printf("page fault on page #%d\n",page);
+	//printf("page fault on page #%d\n",page);
 
 	int i;
 	int nframes = page_table_get_nframes(pt);
@@ -37,7 +37,7 @@ void page_fault_handler( struct page_table *pt, int page )
 	int bits;
 	page_table_get_entry(pt, page, &frame, &bits);
 	char *physmem = page_table_get_physmem(pt);
-	printf("page %d located at frame %d\n", page, frame);
+	//printf("page %d located at frame %d\n", page, frame);
 
 	if(bits == 0)	//this page is not present, so load it
 	{
@@ -100,19 +100,30 @@ void page_fault_handler( struct page_table *pt, int page )
 		}
 		else if(!strcmp("custom", algorithm)) 
 		{
-			printf("starting custom\n");
+			//printf("starting custom\n");
+			int i, min = INT_MAX, replace, p;			
+			for(i = 0; i < nframes; i++)
+			{
+				p = table[i];
+				if(numFaultsOnPage[p] < min && p != page)
+				{
+					min = numFaultsOnPage[p];
+					replace = i;
+				}
+
+			}
 			//we track the number of faults each page has produced
 			//and choose to replace the one with the fewest number 
-			int min = INT_MAX, i = 0, replace;
+			/*int min = INT_MAX, i = 0, replace;
 			for(i = 0; i < page_table_get_npages(pt); i++)
 			{
-				if (numFaultsOnPage[i] < min)
+				if ((numFaultsOnPage[i] < min) && (i != page))
 				{
 					min = numFaultsOnPage[i];
 					replace = i;
 				}
 			}
-			printf("Found page to replace\n");
+			printf("Found page %d to replace\n", replace);
 			for(i = 0; i < nframes; i++)
 			{
 				//replace stores the page to replace
@@ -121,24 +132,24 @@ void page_fault_handler( struct page_table *pt, int page )
 				//will be in i.
 				if(table[i] == replace)
 					break;
-			}
-			printf("Found corresponding frame %d\n", i);
+			}*/
+			//printf("Found frame to replace %d, currently contains page %d\n", replace, table[replace]);
 
 			if(bits != PROT_READ)
 			{
-				disk_write(disk, table[i], &physmem[i*PAGE_SIZE]);
+				disk_write(disk, table[replace], &physmem[replace*PAGE_SIZE]);
 				++nwrites;
 				//write to disk, now ready to replace	
-				printf("replacing frame %d and writing to disk\n", i);
+				//printf("replacing frame %d and writing to disk\n", replace);
 			}
 	
-			disk_read(disk, page, &physmem[i*PAGE_SIZE]);
-			printf("Read from disk\n");
+			disk_read(disk, page, &physmem[replace*PAGE_SIZE]);
 			++nreads;
-			page_table_set_entry(pt, page, i, PROT_READ);
-			printf("Set page table entry for new page\n");
-			page_table_set_entry(pt, table[i], 0, 0);
-			printf("Set page table entries, done\n");
+			page_table_set_entry(pt, page, replace, PROT_READ);
+			page_table_set_entry(pt, table[replace], 0, 0);
+			//printf("Set page table entries, done\n");
+			
+			table[replace] = page;
 			
 		}
 	}
