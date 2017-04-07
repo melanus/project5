@@ -21,10 +21,12 @@ char *algorithm = "rand";
 int *table = NULL;
 struct disk *disk;
 int last = 0;
+int nfaults = 0, nwrites = 0, nreads = 0;
 
 void page_fault_handler( struct page_table *pt, int page )
 {
-	printf("page fault on page #%d\n",page);
+	++nfaults;
+	//printf("page fault on page #%d\n",page);
 
 	int i;
 	int nframes = page_table_get_nframes(pt);
@@ -32,18 +34,19 @@ void page_fault_handler( struct page_table *pt, int page )
 	int bits;
 	page_table_get_entry(pt, page, &frame, &bits);
 	char *physmem = page_table_get_physmem(pt);
-	printf("page %d located at frame %d\n", page, frame);
+	//printf("page %d located at frame %d\n", page, frame);
 
 	if(bits == 0)	//this page is not present, so load it
 	{
-		printf("loading in new page %d\n", page);
+		//printf("loading in new page %d\n", page);
 		for(i = 0; i < nframes; i++)  //check for empty frames
 		{
 			if(table[i] == -1)
 			{
-				printf("found empty frame at %d\n", i);
+			//	printf("found empty frame at %d\n", i);
 				page_table_set_entry(pt, page, i, PROT_READ);
 				disk_read(disk, page, &physmem[i*PAGE_SIZE]);
+				++nreads;
 				table[i] = page;
 				return;
 			}
@@ -60,11 +63,13 @@ void page_fault_handler( struct page_table *pt, int page )
 			page_table_get_entry(pt, page, &frame, &bits);
 			if (bits != PROT_READ) 
 			{
-				printf("replacing frame %d and writing to disk\n", r);
+				//printf("replacing frame %d and writing to disk\n", r);
 				disk_write(disk, table[r], &physmem[r*PAGE_SIZE]);
+				++nwrites;
 				//write changes to disk, now ready to replace
 			}
 			disk_read(disk, page, &physmem[r*PAGE_SIZE]);
+			++nreads;
 			page_table_set_entry(pt, page, r, PROT_READ);
 			page_table_set_entry(pt, table[r], 0, 0);
 			//update page table and remove reference to old page
@@ -77,11 +82,13 @@ void page_fault_handler( struct page_table *pt, int page )
 			page_table_get_entry(pt, page, &frame, &bits);
 			if (bits != PROT_READ)
 			{
-				printf("replacing frame %d and writing to disk\n", last);
+				//printf("replacing frame %d and writing to disk\n", last);
 				disk_write(disk, table[last], &physmem[last*PAGE_SIZE]);
+				++nwrites;
 				//write changes to disk, now ready to replace
 			}
 			disk_read(disk, page, &physmem[last*PAGE_SIZE]);
+			++nreads;
 			page_table_set_entry(pt, page, last, PROT_READ);
 			page_table_set_entry(pt, table[last], 0, 0);
 			//update page table and remove reference to old page
@@ -89,69 +96,16 @@ void page_fault_handler( struct page_table *pt, int page )
 			table[last] = page;
 			last = (last + 1) % nframes;
 		}
+		else if(!strcmp("custom", algorithm)) {}
 	}
 	else if(bits != 0)	//this is trying to write and needs perms
 	{
-		printf("Adding write bit to frame %d\n", frame);
+		//printf("Adding write bit to frame %d\n", frame);
 		//the relevant data is already loaded
 		//it just needs write access
 		page_table_set_entry(pt, page, frame, PROT_READ|PROT_WRITE);
 	}
 	
-/*
-	if(!strcmp("fifo", algorithm))
-	{
-		//printf("started rand\n");
-		int i;
-		int nframes = page_table_get_nframes(pt);
-		int frame;
-		int bits;
-		page_table_get_entry(pt, page, &frame, &bits);
-		char *physmem = page_table_get_physmem(pt);
-
-		if(bits == 0)	//this page is not present, so load it
-		{
-			for(i = 0; i < nframes; i++)  //check for empty frames
-			{
-				if(table[i] == -1)
-				{
-					page_table_set_entry(pt, page, i, PROT_READ);
-					disk_read(disk, page, &physmem[i*PAGE_SIZE]);
-					table[i] = page;
-					return;
-				}
-			}
-
-			//if there are no empty frames, we will pick
-			//first frame that was entered (the first frame)
-			//has been written to, we need to write 
-			//those changes to disk
-
-			page_table_get_entry(pt, page, &frame, &bits);
-			if (bits >= 3)  //corrsponds to 011, write bit set
-			{
-				disk_write(disk, table[last], &physmem[last*PAGE_SIZE]);
-				//write changes to disk, now ready to replace
-			}
-			disk_read(disk, page, &physmem[last*PAGE_SIZE]);
-			page_table_set_entry(pt, page, last, PROT_READ);
-			page_table_set_entry(pt, table[last], 0, 0);
-			//update page table and remove reference to old page
-
-			table[last] = page;
-
-		}
-		else if(bits != 0)	//this is trying to write and needs perms
-		{
-			//the relevant data is already loaded
-			//it just needs write access
-			page_table_set_entry(pt, page, frame, PROT_READ|PROT_WRITE);
-		}
-		last = (last + 1) % nframes;
-	}*/
-
-	//page_table_set_entry(pt, page, page, PROT_READ|PROT_WRITE);
-	//exit(1);
 }
 
 int main( int argc, char *argv[] )
@@ -209,6 +163,8 @@ int main( int argc, char *argv[] )
 
 	page_table_delete(pt);
 	disk_close(disk);
+
+	printf("Program ran with %d page faults, %d disk reads, and %d disk writes\n", nfaults, nreads, nwrites);
 
 	return 0;
 }
