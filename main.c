@@ -152,6 +152,10 @@ void page_fault_handler( struct page_table *pt, int page )
 			table[replace] = page;
 			
 		}
+		else {
+			fprintf(stderr,"unknown algorithm: %s - please use 'rand', or 'fifo', or 'custom'\n",algorithm);
+			exit(1);
+		}
 	}
 	else if(bits != 0)	//this is trying to write and needs perms
 	{
@@ -177,6 +181,10 @@ int main( int argc, char *argv[] )
 	algorithm = argv[3];
 	const char *program = argv[4];
 
+	if((nframes < 3) || (npages < 3)){
+		fprintf(stderr,"Number of pages or frames too small\n");
+		return 1;
+	} 
 	//resize table to be number of frames
 	table = realloc(table, nframes * sizeof(int));
 	int i;
@@ -217,7 +225,7 @@ int main( int argc, char *argv[] )
 		focus_program(virtmem,npages*PAGE_SIZE);
 
 	} else {
-		fprintf(stderr,"unknown program: %s\n",argv[3]);
+		fprintf(stderr,"unknown program: %s\n",argv[4]);
 		return 1;
 	}
 
