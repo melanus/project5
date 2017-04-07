@@ -16,6 +16,7 @@ how to use the page table and disk interfaces.
 #include <errno.h>
 
 #include <time.h>
+#include <limits.h>
 
 char *algorithm = "rand";
 int *table = NULL;
@@ -28,7 +29,7 @@ void page_fault_handler( struct page_table *pt, int page )
 {
 	++nfaults;
 	++numFaultsOnPage[page];
-	//printf("page fault on page #%d\n",page);
+	printf("page fault on page #%d\n",page);
 
 	int i;
 	int nframes = page_table_get_nframes(pt);
@@ -36,7 +37,7 @@ void page_fault_handler( struct page_table *pt, int page )
 	int bits;
 	page_table_get_entry(pt, page, &frame, &bits);
 	char *physmem = page_table_get_physmem(pt);
-	//printf("page %d located at frame %d\n", page, frame);
+	printf("page %d located at frame %d\n", page, frame);
 
 	if(bits == 0)	//this page is not present, so load it
 	{
@@ -45,7 +46,7 @@ void page_fault_handler( struct page_table *pt, int page )
 		{
 			if(table[i] == -1)
 			{
-			//	printf("found empty frame at %d\n", i);
+				//printf("found empty frame at %d\n", i);
 				page_table_set_entry(pt, page, i, PROT_READ);
 				disk_read(disk, page, &physmem[i*PAGE_SIZE]);
 				++nreads;
@@ -99,16 +100,45 @@ void page_fault_handler( struct page_table *pt, int page )
 		}
 		else if(!strcmp("custom", algorithm)) 
 		{
+			printf("starting custom\n");
+			//we track the number of faults each page has produced
+			//and choose to replace the one with the fewest number 
+			int min = INT_MAX, i = 0, replace;
+			for(i = 0; i < page_table_get_npages(pt); i++)
+			{
+				if (numFaultsOnPage[i] < min)
+				{
+					min = numFaultsOnPage[i];
+					replace = i;
+				}
+			}
+			printf("Found page to replace\n");
+			for(i = 0; i < nframes; i++)
+			{
+				//replace stores the page to replace
+				//but now we need to find what frame
+				//the page is stored in.  That value
+				//will be in i.
+				if(table[i] == replace)
+					break;
+			}
+			printf("Found corresponding frame %d\n", i);
+
 			if(bits != PROT_READ)
 			{
-				disk_write(disk, something, &physmem[something * PAGE_SIZE]);
+				disk_write(disk, table[i], &physmem[i*PAGE_SIZE]);
 				++nwrites;
 				//write to disk, now ready to replace	
+				printf("replacing frame %d and writing to disk\n", i);
 			}
-			disk_read(disk, page, &physmem[something*PAGE_SIZE]);
+	
+			disk_read(disk, page, &physmem[i*PAGE_SIZE]);
+			printf("Read from disk\n");
 			++nreads;
-			page_table_set_entry(pt, page, something, PROT_READ);
-			page_table_set_entry(pt, old, 0, 0);
+			page_table_set_entry(pt, page, i, PROT_READ);
+			printf("Set page table entry for new page\n");
+			page_table_set_entry(pt, table[i], 0, 0);
+			printf("Set page table entries, done\n");
 			
 		}
 	}
@@ -143,6 +173,7 @@ int main( int argc, char *argv[] )
 	{
 		table[i] = -1;  //-1 indicates empty
 	}
+	numFaultsOnPage = realloc(numFaultsOnPage, npages*sizeof(int));
 	for (i = 0; i < npages; i++)
 	{
 		numFaultsOnPage[i] = 0;
